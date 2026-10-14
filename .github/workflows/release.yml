@@ -19,7 +19,7 @@ jobs:
         run: |
           node -e "
             const fs = require('fs');
-            const manifest = JSON.parse(fs.readFileSync('streamsnag/manifest.json', 'utf8'));
+            const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
             const required = ['manifest_version', 'name', 'version', 'background', 'action'];
             const missing = required.filter((key) => !(key in manifest));
             if (missing.length > 0) {
@@ -35,13 +35,14 @@ jobs:
 
       - name: Read extension version
         id: version
-        run: echo "version=$(node -p "require('./streamsnag/manifest.json').version")" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(node -p "require('./manifest.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Package extension
         run: |
           mkdir -p dist
-          cd streamsnag
-          zip -r "../dist/streamsnag-v${{ steps.version.outputs.version }}.zip" . -x "icons/generate-icons.ps1"
+          zip -r "dist/streamsnag-v${{ steps.version.outputs.version }}.zip" \
+            manifest.json background.js content.js popup.html popup.css popup.js icons \
+            -x "icons/generate-icons.ps1"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
