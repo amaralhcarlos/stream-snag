@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate manifest.json
+        run: |
+          node -e "
+            const fs = require('fs');
+            const manifest = JSON.parse(fs.readFileSync('streamsnag/manifest.json', 'utf8'));
+            const required = ['manifest_version', 'name', 'version', 'background', 'action'];
+            const missing = required.filter((key) => !(key in manifest));
+            if (missing.length > 0) {
+              console.error('Missing required manifest fields:', missing.join(', '));
+              process.exit(1);
+            }
+            if (manifest.manifest_version !== 3) {
+              console.error('Expected manifest_version 3, got ' + manifest.manifest_version);
+              process.exit(1);
+            }
+            console.log('manifest.json OK - version ' + manifest.version);
+          "
+
+      - name: Read extension version
+        id: version
+        run: echo "version=$(node -p "require('./streamsnag/manifest.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Package extension
+        run: |
+          mkdir -p dist
+          cd streamsnag
+          zip -r "../dist/streamsnag-v${{ steps.version.outputs.version }}.zip" . -x "icons/generate-icons.ps1"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: streamsnag-extension
+          path: dist/*.zip
