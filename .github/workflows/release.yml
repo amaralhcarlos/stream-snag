@@ -9,20 +9,20 @@ permissions:
   contents: write
 
 jobs:
-  package:
+  validate:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Validate manifest.json
+      - name: Validate manifest.base.json
         run: |
           node -e "
             const fs = require('fs');
-            const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
-            const required = ['manifest_version', 'name', 'version', 'background', 'action'];
+            const manifest = JSON.parse(fs.readFileSync('manifest.base.json', 'utf8'));
+            const required = ['manifest_version', 'name', 'version', 'action'];
             const missing = required.filter((key) => !(key in manifest));
             if (missing.length > 0) {
               console.error('Missing required manifest fields:', missing.join(', '));
@@ -32,30 +32,98 @@ jobs:
               console.error('Expected manifest_version 3, got ' + manifest.manifest_version);
               process.exit(1);
             }
-            console.log('manifest.json OK - version ' + manifest.version);
+            console.log('manifest.base.json OK - version ' + manifest.version);
           "
 
       - name: Read extension version
         id: version
-        run: echo "version=$(node -p "require('./manifest.json').version")" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(node -p "require('./manifest.base.json').version")" >> "$GITHUB_OUTPUT"
 
-      - name: Package extension
+  # Chrome pipeline: assemble the unpacked folder and zip it the same way
+  # the Chrome Web Store expects (plain zip of the extension root).
+  build-chrome:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Chrome package
+        run: node scripts/build.js chrome
+
+      - name: Zip Chrome package
         run: |
-          mkdir -p dist
-          zip -r "dist/streamsnag-v${{ steps.version.outputs.version }}.zip" \
-            manifest.json background.js content.js popup.html popup.css popup.js icons \
-            -x "icons/generate-icons.ps1"
+          cd dist/chrome
+          zip -r "../streamsnag-chrome-v${{ needs.validate.outputs.version }}.zip" .
 
-      - name: Upload build artifact
+      - name: Upload Chrome artifact
         uses: actions/upload-artifact@v4
         with:
-          name: streamsnag-extension
+          name: streamsnag-chrome
           path: dist/*.zip
+
+  # Firefox pipeline: build with the Mozilla web-ext CLI, which also lints
+  # the package against Firefox's own WebExtensions requirements.
+  build-firefox:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install web-ext
+        run: npm install --no-save web-ext
+
+      - name: Build Firefox package
+        run: node scripts/build.js firefox
+
+      - name: Lint Firefox package
+        run: npx web-ext lint --source-dir dist/firefox
+
+      - name: Package Firefox extension
+        run: |
+          npx web-ext build \
+            --source-dir dist/firefox \
+            --artifacts-dir dist \
+            --filename "streamsnag-firefox-v${{ needs.validate.outputs.version }}.zip" \
+            --overwrite-dest
+
+      - name: Upload Firefox artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: streamsnag-firefox
+          path: dist/streamsnag-firefox-v${{ needs.validate.outputs.version }}.zip
+
+  release:
+    needs: [validate, build-chrome, build-firefox]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Chrome artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: streamsnag-chrome
+          path: dist
+
+      - name: Download Firefox artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: streamsnag-firefox
+          path: dist
 
       - name: Check if tag already exists
         id: tag_check
         run: |
-          TAG="v${{ steps.version.outputs.version }}"
+          TAG="v${{ needs.validate.outputs.version }}"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
