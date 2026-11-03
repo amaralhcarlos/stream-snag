@@ -1,3 +1,5 @@
+const api = globalThis.browser ?? globalThis.chrome;
+
 const emptyState = document.getElementById("empty-state");
 const urlList = document.getElementById("url-list");
 const clearBtn = document.getElementById("clear-btn");
@@ -77,13 +79,13 @@ function render(urls) {
 }
 
 async function loadUrls() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await api.tabs.query({ active: true, currentWindow: true });
   if (!tab) {
     render([]);
     return;
   }
   activeTabId = tab.id;
-  const urls = await chrome.runtime.sendMessage({ type: "GET_URLS", tabId: activeTabId });
+  const urls = await api.runtime.sendMessage({ type: "GET_URLS", tabId: activeTabId });
   render(urls ?? []);
 }
 
@@ -91,7 +93,7 @@ clearBtn.addEventListener("click", async () => {
   if (activeTabId === null) {
     return;
   }
-  await chrome.runtime.sendMessage({ type: "CLEAR_URLS", tabId: activeTabId });
+  await api.runtime.sendMessage({ type: "CLEAR_URLS", tabId: activeTabId });
   render([]);
 });
 
