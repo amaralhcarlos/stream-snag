@@ -1,0 +1,15 @@
+{
+  "name": "streamsnag",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Detects .m3u8 HLS streams on the current tab and generates ffmpeg download commands.",
+  "scripts": {
+    "build": "node scripts/build.js all",
+    "build:chrome": "node scripts/build.js chrome",
+    "build:firefox": "node scripts/build.js firefox",
+    "lint:firefox": "web-ext lint --source-dir dist/firefox"
+  },
+  "devDependencies": {
+    "web-ext": "latest"
+  }
+}

@@ -2,6 +2,8 @@
 // scripts for .m3u8 URLs that may not trigger a network request Chrome
 // exposes to webRequest (e.g. URLs only ever assigned to element attributes).
 
+const api = globalThis.browser ?? globalThis.chrome;
+
 const M3U8_PATTERN = /https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/g;
 
 function findUrlsInText(text) {
@@ -25,7 +27,7 @@ function scanPage() {
   }
 
   if (found.size > 0) {
-    chrome.runtime.sendMessage({ type: "CONTENT_URLS", urls: Array.from(found) });
+    api.runtime.sendMessage({ type: "CONTENT_URLS", urls: Array.from(found) });
   }
 }
 
